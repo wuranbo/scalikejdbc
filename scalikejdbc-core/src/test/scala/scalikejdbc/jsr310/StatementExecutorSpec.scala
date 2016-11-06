@@ -1,4 +1,5 @@
 package scalikejdbc
+package jsr310
 
 import org.scalatest._
 

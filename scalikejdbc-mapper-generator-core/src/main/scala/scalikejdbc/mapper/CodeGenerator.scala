@@ -578,6 +578,11 @@ class CodeGenerator(table: Table, specifiedClassName: Option[String] = None)(imp
       case ReturnCollectionType.CanBuildFrom => C
     }
 
+    val emptyCollection = config.returnCollectionType match {
+      case ReturnCollectionType.CanBuildFrom => C + ".apply().result()"
+      case _ => returnType + ".empty"
+    }
+
     val toResult = config.returnCollectionType match {
       case ReturnCollectionType.List => "list.apply()"
       case ReturnCollectionType.Vector => "collection.apply[Vector]()"
@@ -639,20 +644,22 @@ class CodeGenerator(table: Table, specifiedClassName: Option[String] = None)(imp
     /**
      * {{{
      * def batchInsert(entities: Seq[Member])(implicit session: DBSession = autoSession): Seq[Int] = {
-     *   val params: Seq[Seq[(Symbol, Any)]] = entities.map(entity =>
-     *   Seq(
-     *     'id -> entity.id,
-     *     'name -> entity.name,
-     *     'birthday -> entity.birthday))
-     *   SQL("""insert into member (
-     *     id,
-     *     name,
-     *     birthday
-     *   ) values (
-     *     {id},
-     *     {name},
-     *     {birthday}
-     *   )""").batchByName(params: _*).apply()
+     *   if(entities.nonEmpty) {
+     *     val params: Seq[Seq[(Symbol, Any)]] = entities.map(entity =>
+     *     Seq(
+     *       'id -> entity.id,
+     *       'name -> entity.name,
+     *       'birthday -> entity.birthday))
+     *     SQL("""insert into member (
+     *       id,
+     *       name,
+     *       birthday
+     *     ) values (
+     *       {id},
+     *       {name},
+     *       {birthday}
+     *     )""").batchByName(params: _*).apply()
+     *   } else Seq.empty
      * }
      * }}}
      */
@@ -675,16 +682,18 @@ class CodeGenerator(table: Table, specifiedClassName: Option[String] = None)(imp
 
       // def batchInsert=(
       1.indent + s"def batchInsert${typeParam}(entities: Seq[" + className + "])(implicit session: DBSession" + defaultAutoSession + canBuildFrom + s"): $returnType[Int] = {" + eol +
-        2.indent + "val params: Seq[Seq[(Symbol, Any)]] = entities.map(entity =>" + eol +
-        3.indent + "Seq(" + eol +
-        batchInsertColumns.map(c => 4.indent + "'" + c.nameInScala.replace("`", "") + " -> entity." + c.nameInScala).mkString(comma + eol) +
+        2.indent + "if(entities.nonEmpty) {" + eol +
+        3.indent + "val params: Seq[Seq[(Symbol, Any)]] = entities.map(entity =>" + eol +
+        4.indent + "Seq(" + eol +
+        batchInsertColumns.map(c => 5.indent + "'" + c.nameInScala.replace("`", "") + " -> entity." + c.nameInScala).mkString(comma + eol) +
         "))" + eol +
-        4.indent + "SQL(\"\"\"insert into " + table.name + "(" + eol +
+        3.indent + "SQL(\"\"\"insert into " + table.name + "(" + eol +
         batchInsertColumns.map(c => 4.indent + c.name.replace("`", "")).mkString(comma + eol) + eol +
         3.indent + ")" + " values (" + eol +
         batchInsertColumns.map(c => 4.indent + "{" + c.nameInScala.replace("`", "") + "}").mkString(comma + eol) + eol +
         3.indent + ")\"\"\").batchByName(params: _*).apply[" + returnType + "]()" + eol +
-        2.indent + "}" + eol
+        2.indent + s"} else $emptyCollection" + eol +
+        1.indent + "}" + eol
     }
 
     val isQueryDsl = config.template == GeneratorTemplate.queryDsl
